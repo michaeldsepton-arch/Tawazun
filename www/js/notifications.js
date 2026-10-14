@@ -104,10 +104,10 @@ const Notify = (() => {
   }
 
   const ALARM_LINES = [
-    "Still time for 30 minutes today — want to knock it out?",
-    "Evening check-in: today's session is still open if you've got half an hour.",
+    "Still time for your session today — want to knock it out?",
+    "Evening check-in: today's session is still open if you've got an hour.",
     "No pressure, just a nudge — your workout is still waiting for you today.",
-    "Quick 30? Tonight still counts toward this week.",
+    "Got an hour tonight? It still counts toward this week.",
   ];
 
   function dateAt(daysFromNow, hhmm) {
@@ -175,7 +175,7 @@ const Notify = (() => {
       const remaining = projectedRemaining(state, fireAt);
       const msg = remaining === 0
         ? { title: "You're on track 🎉", body: "This week's sessions are covered — today's optional." }
-        : { title: "Got 30 min today?", body: `${remaining} session${remaining > 1 ? 's' : ''} left this week — tap to pick a time that works today.` };
+        : { title: "Got an hour today?", body: `${remaining} session${remaining > 1 ? 's' : ''} left this week — tap to pick a time that works today.` };
 
       checkins.push({
         id: CHECKIN_BASE_ID + i, title: msg.title, body: msg.body,
@@ -247,7 +247,7 @@ const Notify = (() => {
     try {
       await LN.schedule({ notifications: [{
         id: TODAY_PICK_ID, title: 'Workout time ⏰',
-        body: "You picked this time for today — ready for your 30 minutes?",
+        body: "You picked this time for today — ready for your session?",
         schedule: { at }, channelId: 'tawazun-alarm', smallIcon: 'ic_stat_tawazun',
         actionTypeId: CHECKIN_ACTION_TYPE, extra: { kind: 'checkin' },
       }] });

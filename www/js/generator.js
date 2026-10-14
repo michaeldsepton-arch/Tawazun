@@ -1,5 +1,5 @@
 // Workout generation: picks a fresh, non-repeating, difficulty-scaled session that
-// actually totals ~30 real minutes once every step (reps or time) gets a real timer.
+// actually totals ~60-75 real minutes once every step (reps or time) gets a real timer.
 const Generator = (() => {
 
   const TRANSITION_SEC = 15; // time to change position / grab equipment between different exercises
@@ -127,9 +127,9 @@ const Generator = (() => {
   // Rest between sets, and the set-count range we're allowed to flex within to hit the
   // time budget. Higher tiers rest a little less and can take on more total sets.
   function tierBand(tier) {
-    if (tier < 1.5) return { restSec: 45, minSets: 2, maxSets: 4, repTempo: 3.4 };
-    if (tier < 2.5) return { restSec: 35, minSets: 3, maxSets: 5, repTempo: 3.0 };
-    return { restSec: 25, minSets: 3, maxSets: 6, repTempo: 2.7 };
+    if (tier < 1.5) return { restSec: 45, minSets: 2, maxSets: 5, repTempo: 3.4 };
+    if (tier < 2.5) return { restSec: 35, minSets: 3, maxSets: 6, repTempo: 3.0 };
+    return { restSec: 25, minSets: 3, maxSets: 7, repTempo: 2.7 };
   }
 
   function pickFew(list, n) {
@@ -292,13 +292,21 @@ const Generator = (() => {
     const used = new Set();
     const [groupA, groupB] = secondaryGroupsForToday(state);
 
+    // A full commercial-gym, 60-75 minute session needs more than 7 distinct moves
+    // to fill its time budget without leaning on an unrealistic number of sets per
+    // exercise — so back/abs (trained every session) and both secondary groups each
+    // get an extra slot here versus a shorter-session split.
     const slots = [
       { groups: ['back'] },
       { groups: ['back'] },
+      { groups: ['back'] },
+      { groups: ['abs'] },
       { groups: ['abs'] },
       { groups: ['abs'] },
       { groups: [groupA] },
       { groups: [groupA] },
+      { groups: [groupA] },
+      { groups: [groupB] },
       { groups: [groupB] },
     ];
 
@@ -321,8 +329,8 @@ const Generator = (() => {
   // secondary-group-rotates split as the strength session.
   function buildCircuitWorkout(state, band, mainBudget) {
     const used = new Set();
-    const [groupA] = secondaryGroupsForToday(state);
-    const groupPlan = ['back', 'abs', groupA, 'back', 'abs'];
+    const [groupA, groupB] = secondaryGroupsForToday(state);
+    const groupPlan = ['back', 'abs', groupA, 'back', 'abs', groupB];
     const restSec = 20;
     const exList = [];
     for (const g of groupPlan) {
@@ -339,8 +347,12 @@ const Generator = (() => {
     const roundSec = perExerciseSec.reduce((a, s) => a + s, 0)
       + (exList.length - 1) * TRANSITION_SEC // changeovers within the round
       + restSec; // rest before next round
+    // Circuits naturally support more total rounds than a straight-set exercise can
+    // take sets, since each round spreads the work across every move rather than
+    // hammering one move repeatedly — cap generously so a 60-75 minute budget can
+    // actually be reached instead of being squeezed to fit a strength-sized ceiling.
     let rounds = Math.max(2, Math.round(mainBudget / roundSec));
-    rounds = Math.min(rounds, band.maxSets + 1); // circuits can run one extra round vs strength sets
+    rounds = Math.min(rounds, 10);
 
     const blocks = exList.map(ex => makeBlock(ex, rounds, restSec, state.progress.difficultyTier, band.repTempo, state));
     return { type: 'circuit', blocks };

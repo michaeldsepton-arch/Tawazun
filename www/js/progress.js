@@ -86,7 +86,7 @@ const Progress = (() => {
       return { title: `Let's grab today's session`, body: `This week's ${wp.target}-session target is out of reach now — no all-or-nothing here. One more today still counts, and next week resets clean.` };
     }
     if (wp.remaining === 1) {
-      return { title: `Today's the day`, body: `Just 1 session left to hit ${wp.target} this week — got 30 min today?` };
+      return { title: `Today's the day`, body: `Just 1 session left to hit ${wp.target} this week — got an hour today?` };
     }
     if (wp.remaining === wp.anyDaysLeft) {
       return { title: `Every day counts now`, body: `${wp.remaining} sessions left and exactly ${wp.anyDaysLeft} day${wp.anyDaysLeft>1?'s':''} left — today keeps you on pace.` };
@@ -94,7 +94,7 @@ const Progress = (() => {
     if (wp.anyDaysLeft <= 2) {
       return { title: `Last call this week`, body: `${wp.remaining} to go, ${wp.anyDaysLeft} day${wp.anyDaysLeft>1?'s':''} left. Today would keep you on track.` };
     }
-    return { title: `Got 30 min today?`, body: `${wp.done}/${wp.target} done this week — plenty of runway, but today works great if you're free.` };
+    return { title: `Got an hour today?`, body: `${wp.done}/${wp.target} done this week — plenty of runway, but today works great if you're free.` };
   }
 
   // Called after a completed session: updates streak + totals + recency + difficulty.
