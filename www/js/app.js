@@ -423,14 +423,26 @@ const App = (() => {
 
   // ---------------- HOME ----------------
   // A pendingWorkout (or an in-progress session built from one) is persisted and
-  // reused until she completes it -- but exercises.js isn't static: an exercise
-  // can be renamed, merged into another, or removed entirely (as assisted_wall_sit
-  // was). Anyone holding an already-generated plan that references a now-gone
-  // exercise id would otherwise be stuck with a dead row on the home screen --
-  // no thumbnail, not clickable, and nothing to tap to get rid of it. Treating
-  // such a plan as invalid and silently regenerating it is the general fix: it
-  // covers any future removal or rename the same way, not just this one.
-  function workoutIsValid(w) {
+  // reused until he completes it -- but exercises.js isn't static: an exercise
+  // can be renamed, merged into another, or removed entirely. Anyone holding an
+  // already-generated plan that references a now-gone exercise id would
+  // otherwise be stuck with a dead row on the home screen -- no thumbnail, not
+  // clickable, and nothing to tap to get rid of it. Treating such a plan as
+  // invalid and silently regenerating it is the general fix: it covers any
+  // future removal or rename the same way, not just one case.
+  //
+  // A plan can also go stale without any id disappearing: if it was generated
+  // before a fix to the ladder-defaulting logic (or before he ever had a
+  // chance to express a build-up preference, e.g. for Pull-Up), its blocks
+  // still point at perfectly real exercises -- just not the ones today's
+  // rules would actually pick. A saved plan was only ever re-checked against
+  // "does this id still exist," never against the current defaulting logic,
+  // so a fix to that logic would silently not apply to any plan already on
+  // his phone. Re-running each ladder-member block through
+  // Generator.resolvePreferred() right now and comparing catches that drift
+  // too, so a logic fix takes effect on the very next Home visit instead of
+  // only once the stale plan happens to get completed.
+  function workoutIsValid(w, state) {
     if (!w || !w.warmup || !w.blocks || !w.cooldown) return false;
     const ids = [
       ...w.warmup.map(x => x.id),
@@ -438,12 +450,23 @@ const App = (() => {
       ...w.cooldown.map(x => x.id),
       ...(w.finisher ? [w.finisher.exerciseId] : []),
     ];
-    return ids.every(id => !!lookupMovement(id));
+    if (!ids.every(id => !!lookupMovement(id))) return false;
+
+    if (state) {
+      for (const b of w.blocks) {
+        const ex = lookupMovement(b.exerciseId);
+        if (!ex || !ex.ladder) continue;
+        const top = Generator.byId(defaultLadderRungId(ex.ladder));
+        const resolved = top ? Generator.resolvePreferred(state, top) : null;
+        if (resolved && resolved.id !== b.exerciseId) return false;
+      }
+    }
+    return true;
   }
 
   function ensurePendingWorkout() {
     const state = Store.get();
-    if (!workoutIsValid(state.pendingWorkout)) {
+    if (!workoutIsValid(state.pendingWorkout, state)) {
       const w = Generator.generate(state);
       Store.set(s => { s.pendingWorkout = w; return s; });
     }
@@ -848,7 +871,7 @@ const App = (() => {
   function startWorkout() {
     const state = Store.get();
     let workout = state.pendingWorkout;
-    if (!workoutIsValid(workout)) {
+    if (!workoutIsValid(workout, state)) {
       workout = Generator.generate(state);
       Store.set(s => { s.pendingWorkout = workout; return s; });
     }
