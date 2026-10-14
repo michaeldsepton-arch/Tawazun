@@ -7,18 +7,20 @@ const Store = (() => {
     onboardedAt: null, // set once, used to prorate the target for a partial first week
     profile: { name: '' },
     settings: {
-      weeklyTarget: 4,              // sessions per week, flexible 3-4
-      preferredDays: [1,2,3,4,5],   // Mon-Fri lean; weekend optional (0=Sun..6=Sat)
-      sessionMinutes: 30,
+      weeklyTarget: 4,              // sessions per week — his actual gym days
+      preferredDays: [0,2,3,6],     // Tue, Wed, Sat, Sun (0=Sun..6=Sat)
+      sessionMinutes: 65,
       reminderTime: '08:00',        // manual fallback when Fajr lookup is off/unavailable
       useFajrSchedule: true,
       fajrOffsetMinutes: 30,
-      prayer: { city: 'Red Deer', country: 'Canada', method: 2 }, // method 2 = ISNA
+      prayer: { city: 'Edmonton', country: 'Canada', method: 2 }, // method 2 = ISNA
       cycleMode: false,
       cycleTime: '11:00',
       alarmEnabled: true,
       alarmTime: '17:30',
-      equipment: ['bodyweight','dumbbell','bench','plate','curlbar','table','treadmill'],
+      equipment: ['bodyweight','dumbbell','barbell','bench','cable','lat_pulldown','seated_row',
+        'leg_press','leg_curl','leg_extension','hack_squat','pull_up_bar','assisted_pullup',
+        'plate','band','treadmill','bike','rower'],
       excludedExerciseIds: [],
       excludedPatterns: [],         // e.g. avoid certain movement patterns if needed
       weighInDay: 3,                 // day of week she weighs in (0=Sun..6=Sat); default Wednesday
@@ -30,7 +32,8 @@ const Store = (() => {
       entryUnits: 'kg',              // 'kg' or 'lbs' — remembers the last unit picked at any weight *input* field
     },
     progress: {
-      difficultyTier: 1.0,          // 1.0 - 3.0, floats, scales up with consistency
+      difficultyTier: 1.8,          // 1.0 - 3.0, floats, scales up with consistency — starts above
+                                     // full-beginner since he's intermediate, just returning from a break
       streak: 0,
       longestStreak: 0,
       totalSessions: 0,

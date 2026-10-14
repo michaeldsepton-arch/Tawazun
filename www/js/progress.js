@@ -100,12 +100,13 @@ const Progress = (() => {
   // Called after a completed session: updates streak + totals + recency + difficulty.
   function recordCompletion(state, workout, feedback) {
     const today = new Date().toISOString();
+    const allBlocks = workout.finisher ? [...workout.blocks, workout.finisher] : workout.blocks;
     state.history.push({
       date: today, type: workout.type, workoutId: workout.id,
-      exerciseIds: workout.blocks.map(b => b.exerciseId),
+      exerciseIds: allBlocks.map(b => b.exerciseId),
       feedback, minutes: workout.estMinutes,
     });
-    workout.blocks.forEach(b => { state.exerciseRecency[b.exerciseId] = today; });
+    allBlocks.forEach(b => { state.exerciseRecency[b.exerciseId] = today; });
 
     state.progress.totalSessions += 1;
 

@@ -37,7 +37,7 @@
       <h1 style="font-size:24px">Reminders</h1>
       <div class="card" style="padding:14px">
         <div class="t-label" style="font-weight:600">Morning check-in: 30 min after Fajr</div>
-        <p class="sub" style="color:var(--fg-faint);font-size:12.5px;margin-top:4px">Calculated for Red Deer, AB (ISNA method). Change the city, the offset, or switch to a fixed time any time in Settings.</p>
+        <p class="sub" style="color:var(--fg-faint);font-size:12.5px;margin-top:4px">Calculated for Edmonton, AB (ISNA method). Change the city, the offset, or switch to a fixed time any time in Settings.</p>
       </div>
       <div class="toggle-row">
         <div><div class="t-label">Evening alarm</div><div class="t-sub">If today's workout isn't done yet</div></div>
@@ -177,9 +177,9 @@
         <button class="btn btn-ghost btn-sm" style="margin-top:8px" onclick="App.skipExercise()">Skip this exercise</button>
       </div>
 
-      <!-- Shown only on moves that have a build-up progression (push-up, plank,
-           pull-up, etc.) — lets her pick an easier or harder step any time, in
-           either entry or timer mode, without disrupting the step she's on. -->
+      <!-- Shown only on moves that have a build-up progression (assisted pull-up,
+           etc.) — lets him pick an easier or harder step any time, in either entry
+           or timer mode, without disrupting the step he's on. -->
       <button class="btn btn-ghost btn-sm" id="playerLadderBtn" style="display:none;margin-top:6px" onclick="App.openLadderModalForCurrentStep()">Easier alternatives</button>
 
       <div class="cue-card" id="playerCue">—</div>
@@ -340,7 +340,7 @@
         <div id="fajrFields" style="display:flex;flex-direction:column;gap:12px;margin-top:12px">
           <div style="display:flex;gap:10px">
             <label class="field" style="flex:1">City
-              <input type="text" id="setPrayerCity" placeholder="Red Deer">
+              <input type="text" id="setPrayerCity" placeholder="Edmonton">
             </label>
             <label class="field" style="flex:1">Country
               <input type="text" id="setPrayerCountry" placeholder="Canada">
@@ -355,15 +355,6 @@
         <label class="field" id="manualTimeField" style="margin-top:12px">Manual check-in time
           <input type="time" id="setReminderTime">
         </label>
-
-        <div class="toggle-row" style="margin-top:4px">
-          <div><div class="t-label">On my cycle</div><div class="t-sub">Push the morning check-in later</div></div>
-          <button class="switch" id="setCycleToggle" onclick="App.toggleSwitch(this); App.renderSettingsVisibility();"></button>
-        </div>
-        <label class="field" id="cycleTimeField" style="margin-top:8px">Check-in time while on cycle
-          <input type="time" id="setCycleTime" value="11:00">
-        </label>
-        <p class="sub" style="color:var(--fg-faint);font-size:12px;margin-top:4px">Defaults to 11:00am — change it any time, whether or not the toggle above is on.</p>
       </div>
 
       <div class="card">

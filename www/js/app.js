@@ -47,7 +47,7 @@ const App = (() => {
       { title:'Units here are separate', scene:'settings', target:'#setUnitsToggle', body:'The kg/lbs choice for this tab\'s trend and projection text is set in Settings, on its own — separate from the switches next to each input field.' },
     ]},
     { id:'settings', title:'Settings', icon:'◂', scene:'settings', steps:[
-      { title:'Make it yours', target:null, body:'Set your weekly schedule, the equipment you have on hand, prayer-time-based reminders, cycle-aware pacing, your weigh-in day/time, and more — all here.' },
+      { title:'Make it yours', target:null, body:'Set your weekly schedule, the equipment you have on hand, prayer-time-based reminders, your weigh-in day/time, and more — all here.' },
     ]},
     { id:'quran', title:"Qur'an Player", icon:'◪', scene:'quran', steps:[
       { title:'Listen any time', target:'#screen-quran .card', body:"Pick a reciter, a surah, and how you'd like it repeated, right from the Qur'an tab." },
@@ -436,6 +436,7 @@ const App = (() => {
       ...w.warmup.map(x => x.id),
       ...w.blocks.map(x => x.exerciseId),
       ...w.cooldown.map(x => x.id),
+      ...(w.finisher ? [w.finisher.exerciseId] : []),
     ];
     return ids.every(id => !!lookupMovement(id));
   }
@@ -583,6 +584,13 @@ const App = (() => {
         images: b.images,
         video: b.video,
       })),
+      ...(workout.finisher ? [{
+        id: workout.finisher.exerciseId, name: workout.finisher.name,
+        meta: 'Cardio finisher · ' + Math.round(workout.finisher.duration / 60) + ' min',
+        icon: PATTERN_ICON[workout.finisher.pattern] || '●',
+        images: workout.finisher.images,
+        video: workout.finisher.video,
+      }] : []),
       ...workout.cooldown.map(c => ({ id: c.id, name: c.name, meta: 'Cool-down · ' + c.duration + 's', icon: '○', images: c.images, video: c.video })),
     ];
     items.forEach(it => {
@@ -823,6 +831,11 @@ const App = (() => {
           if (s < block.sets) steps.push({ phase:'rest', name:'Rest', nextName: block.name, nextId: block.exerciseId, cue:'Catch your breath, shake it out.', images: block.images||[], video: block.video||null, pattern: block.pattern, timeBased:true, duration: block.restSec });
         }
       });
+    }
+
+    // Cardio finisher: a single pass, after the main sets/rounds and before cooldown.
+    if (workout.finisher) {
+      steps.push(workStep(workout.finisher, 1, 1));
     }
 
     workout.cooldown.forEach((c) => {
@@ -1164,7 +1177,8 @@ const App = (() => {
 
   function finishWorkout() {
     const mins = Math.round((Date.now() - session.startedAt) / 60000);
-    $('feedbackSummary').textContent = `${session.workout.blocks.length} exercises · about ${mins || session.workout.estMinutes} min`;
+    const exCount = session.workout.blocks.length + (session.workout.finisher ? 1 : 0);
+    $('feedbackSummary').textContent = `${exCount} exercises · about ${mins || session.workout.estMinutes} min`;
     document.querySelectorAll('#feedbackOptions button').forEach(b => b.classList.remove('selected'));
     $('feedbackWeight').value = '';
     $('feedbackWeight').placeholder = entryUnitLabel();
@@ -1402,8 +1416,6 @@ const App = (() => {
     $('setPrayerCity').value = state.settings.prayer.city;
     $('setPrayerCountry').value = state.settings.prayer.country;
     $('setFajrOffset').value = state.settings.fajrOffsetMinutes;
-    $('setCycleToggle').classList.toggle('on', state.settings.cycleMode);
-    $('setCycleTime').value = state.settings.cycleTime;
     $('setPauseToggle').classList.toggle('on', state.settings.pauseMode);
     $('setSoundToggle').classList.toggle('on', state.settings.soundOnFinish);
     $('setVibrateToggle').classList.toggle('on', state.settings.vibrateOnFinish);
@@ -1420,8 +1432,12 @@ const App = (() => {
     renderSingleDayGrid('setWeighInDay', () => setWeighInDaySel, (d) => { setWeighInDaySel = d; });
 
     const equipAll = [
-      ['bodyweight','Bodyweight'], ['dumbbell','Dumbbells'], ['bench','Bench'],
-      ['plate','Plates'], ['curlbar','Curl bar'], ['table','Coffee table'], ['treadmill','Treadmill'],
+      ['bodyweight','Bodyweight'], ['dumbbell','Dumbbells'], ['barbell','Barbell'], ['bench','Bench'],
+      ['cable','Cable machine'], ['lat_pulldown','Lat pulldown'], ['seated_row','Seated row'],
+      ['leg_press','Leg press'], ['leg_curl','Leg curl'], ['leg_extension','Leg extension'],
+      ['hack_squat','Hack squat'], ['pull_up_bar','Pull-up bar'], ['assisted_pullup','Assisted pull-up'],
+      ['plate','Plates'], ['band','Resistance band'],
+      ['treadmill','Treadmill'], ['bike','Bike'], ['rower','Rower'],
     ];
     const wrap = $('setEquipment'); wrap.innerHTML = '';
     equipAll.forEach(([id,label]) => {
@@ -1455,8 +1471,6 @@ const App = (() => {
     const fajrOn = $('setFajrToggle').classList.contains('on');
     $('fajrFields').style.display = fajrOn ? 'flex' : 'none';
     $('manualTimeField').style.display = fajrOn ? 'none' : 'flex';
-    // always visible (not just when cycle mode is on) so the default is easy to find and change
-    $('cycleTimeField').style.display = 'flex';
   }
 
   function saveSettings() {
@@ -1472,11 +1486,9 @@ const App = (() => {
       s.settings.alarmTime = $('setAlarmTime').value;
       s.settings.alarmEnabled = $('setAlarmToggle').classList.contains('on');
       s.settings.useFajrSchedule = $('setFajrToggle').classList.contains('on');
-      s.settings.prayer.city = $('setPrayerCity').value.trim() || 'Red Deer';
+      s.settings.prayer.city = $('setPrayerCity').value.trim() || 'Edmonton';
       s.settings.prayer.country = $('setPrayerCountry').value.trim() || 'Canada';
       s.settings.fajrOffsetMinutes = +$('setFajrOffset').value || 30;
-      s.settings.cycleMode = $('setCycleToggle').classList.contains('on');
-      s.settings.cycleTime = $('setCycleTime').value || '11:00';
       s.settings.equipment = equipIds.length ? equipIds : ['bodyweight'];
       s.settings.excludedExerciseIds = excludedIds;
       s.settings.weighInDay = setWeighInDaySel;

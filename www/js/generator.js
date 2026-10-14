@@ -3,7 +3,26 @@
 const Generator = (() => {
 
   const TRANSITION_SEC = 15; // time to change position / grab equipment between different exercises
-  const WEIGHTED_EQUIPMENT = ['dumbbell', 'plate', 'curlbar'];
+  const WEIGHTED_EQUIPMENT = ['dumbbell', 'barbell', 'plate', 'cable'];
+
+  // Back and abs train every gym day (the user's own stated priority, given his back).
+  // The other four muscle groups rotate two-at-a-time by day of week, so each one lands
+  // about HALF as often as back/abs — e.g. Tue/Sat is a push day (chest+shoulders),
+  // Wed/Sun is a legs+arms day, so each secondary group gets 2 of the 4 weekly gym days
+  // while back/abs get all 4. Falls back to session-count parity for any day outside
+  // his stated Tue/Wed/Sat/Sun schedule, so this still works if he trains on a day he
+  // didn't originally plan for.
+  const SECONDARY_BY_DOW = {
+    2: ['chest', 'shoulders'], // Tue
+    6: ['chest', 'shoulders'], // Sat
+    3: ['legs', 'arms'],       // Wed
+    0: ['legs', 'arms'],       // Sun
+  };
+  function secondaryGroupsForToday(state) {
+    const dow = new Date().getDay();
+    if (SECONDARY_BY_DOW[dow]) return SECONDARY_BY_DOW[dow];
+    return state.progress.totalSessions % 2 === 0 ? ['chest', 'shoulders'] : ['legs', 'arms'];
+  }
 
   function daysSince(dateStr) {
     if (!dateStr) return 999;
@@ -59,10 +78,13 @@ const Generator = (() => {
     return rungs[rungs.length - 1] === ex.id;
   }
 
-  function eligible(state, patterns, excludeIds) {
+  // `groups` filters on the exercise's muscle-group slot (back/abs/chest/shoulders/
+  // legs/arms/cardio) rather than its movement pattern, since that's what the split
+  // is actually organized around now.
+  function eligible(state, groups, excludeIds) {
     const s = state.settings;
     return EXERCISES.filter(e =>
-      patterns.includes(e.pattern) &&
+      groups.includes(e.group) &&
       e.equipment.some(eq => s.equipment.includes(eq)) &&
       !s.excludedExerciseIds.includes(e.id) &&
       !s.excludedPatterns.includes(e.pattern) &&
@@ -72,14 +94,14 @@ const Generator = (() => {
   }
 
   // Pick the best candidate: favors long-unused exercises, light tier matching, a
-  // liked bonus (item #5 — liking an exercise makes it enter rotation more often),
-  // and a little randomness.
-  function pickExercise(state, patterns, excludeIds, minGapDays) {
-    let pool = eligible(state, patterns, excludeIds).filter(e =>
+  // liked bonus (liking an exercise makes it enter rotation more often), and a
+  // little randomness.
+  function pickExercise(state, groups, excludeIds, minGapDays) {
+    let pool = eligible(state, groups, excludeIds).filter(e =>
       daysSince(state.exerciseRecency[e.id]) >= minGapDays
     );
-    if (pool.length === 0) pool = eligible(state, patterns, excludeIds); // relax recency
-    if (pool.length === 0) pool = EXERCISES.filter(e => patterns.includes(e.pattern) && isTopLadderRung(e)); // last resort, ignore equipment/exclude
+    if (pool.length === 0) pool = eligible(state, groups, excludeIds); // relax recency
+    if (pool.length === 0) pool = EXERCISES.filter(e => groups.includes(e.group) && isTopLadderRung(e)); // last resort, ignore equipment/exclude
     if (pool.length === 0) return null;
 
     const targetTier = state.progress.difficultyTier;
@@ -264,22 +286,25 @@ const Generator = (() => {
     return blocks;
   }
 
+  // Back + abs every gym day; the other two groups (picked by secondaryGroupsForToday)
+  // rotate in at roughly half the frequency — see SECONDARY_BY_DOW above.
   function buildStrengthWorkout(state, band, mainBudget) {
-    const n = state.progress.totalSessions;
     const used = new Set();
+    const [groupA, groupB] = secondaryGroupsForToday(state);
 
     const slots = [
-      { patterns: n % 2 === 0 ? ['squat'] : ['lunge'] },
-      { patterns: ['hinge', 'lunge'] },
-      { patterns: n % 2 === 0 ? ['pushH'] : ['pushV'] },
-      { patterns: ['pull'] },
-      { patterns: ['core'] },
-      { patterns: ['core', 'carry'] },
+      { groups: ['back'] },
+      { groups: ['back'] },
+      { groups: ['abs'] },
+      { groups: ['abs'] },
+      { groups: [groupA] },
+      { groups: [groupA] },
+      { groups: [groupB] },
     ];
 
     const blocks = [];
     for (const slot of slots) {
-      const picked = pickExercise(state, slot.patterns, used, 10);
+      const picked = pickExercise(state, slot.groups, used, 10);
       if (!picked) continue;
       used.add(picked.id);
       const ex = resolvePreferred(state, picked);
@@ -292,14 +317,16 @@ const Generator = (() => {
 
   // A circuit moves through all the exercises once per round with only a short
   // changeover between moves, then a real rest before the next round — not just
-  // straight sets of one move at a time.
+  // straight sets of one move at a time. Keeps the same back/abs-every-day,
+  // secondary-group-rotates split as the strength session.
   function buildCircuitWorkout(state, band, mainBudget) {
     const used = new Set();
-    const patternPlan = ['cardio', 'squat', 'core', 'pushH', 'cardio', 'pull'];
+    const [groupA] = secondaryGroupsForToday(state);
+    const groupPlan = ['back', 'abs', groupA, 'back', 'abs'];
     const restSec = 20;
     const exList = [];
-    for (const p of patternPlan) {
-      const picked = pickExercise(state, [p], used, 7);
+    for (const g of groupPlan) {
+      const picked = pickExercise(state, [g], used, 7);
       if (!picked) continue;
       used.add(picked.id);
       const ex = resolvePreferred(state, picked);
@@ -322,7 +349,7 @@ const Generator = (() => {
   // Mirrors exactly how app.js's buildSteps() turns warmup/blocks/cooldown into real
   // player steps, so the number shown on Home always matches what she actually
   // experiences in the player. Keep this in sync with buildSteps() in app.js.
-  function estimateMinutes(workout, warmup, cooldown) {
+  function estimateMinutes(workout, warmup, cooldown, finisher) {
     let sec = 0;
 
     warmup.forEach((w, i) => { sec += w.duration; if (i < warmup.length - 1) sec += TRANSITION_SEC; });
@@ -345,36 +372,62 @@ const Generator = (() => {
       });
     }
 
-    if (cooldown.length && workout.blocks.length) sec += TRANSITION_SEC;
+    // Cardio finisher runs once, after the main sets/rounds and before cooldown.
+    if (finisher && workout.blocks.length) sec += TRANSITION_SEC;
+    if (finisher) sec += blockSeconds(finisher);
+
+    if (cooldown.length && (workout.blocks.length || finisher)) sec += TRANSITION_SEC;
     cooldown.forEach((c, i) => { sec += c.duration; if (i < cooldown.length - 1) sec += TRANSITION_SEC; });
 
     return Math.round(sec / 60);
   }
 
+  // Picks the cardio finisher (treadmill/bike/rower, whichever he has set up in
+  // Settings), built as a single-set, no-rest block so it just runs once at the
+  // end — same block shape the player already knows how to run.
+  function buildCardioFinisher(state, tier) {
+    const used = new Set();
+    const picked = pickExercise(state, ['cardio'], used, 3);
+    if (!picked) return null;
+    const ex = resolvePreferred(state, picked);
+    return makeBlock(ex, 1, 0, tier, 1, state);
+  }
+
   function generate(state) {
     const type = pickSessionType(state);
     const band = tierBand(state.progress.difficultyTier);
-    const targetTotalSec = (state.settings.sessionMinutes || 30) * 60;
+    const targetTotalSec = (state.settings.sessionMinutes || 65) * 60;
 
-    const warmup = pickFew(WARMUPS, 2);
+    const warmupPool = WARMUPS.filter(w => !w.equipment || w.equipment.some(eq => state.settings.equipment.includes(eq)));
+    const warmup = pickFew(warmupPool, 2);
     // Cool-down stretches depend on which patterns actually end up in the workout
-    // (so they can be tailored to what she trained), which isn't known until the
+    // (so they can be tailored to what he trained), which isn't known until the
     // workout itself is built below — use a rough average cooldown length here
     // just to size the main-set time budget, then pick the real, targeted
-    // stretches afterward once the blocks exist.
+    // stretches afterward once the blocks exist. The cardio finisher's length is
+    // already known (it scales with difficulty tier the same way any other
+    // time-based block does), so it's reserved up front.
     const roughCooldownSec = 50; // ~2 stretches at ~25s each, same ballpark as before
+    const finisherSec = state.progress.difficultyTier >= 2.5 ? 900 : 720;
     const overheadSec = warmup.reduce((a, w) => a + w.duration, 0)
       + roughCooldownSec
-      + (warmup.length + 2) * TRANSITION_SEC;
+      + finisherSec
+      + (warmup.length + 3) * TRANSITION_SEC;
     const mainBudget = Math.max(600, targetTotalSec - overheadSec);
 
     const workout = type === 'strength'
       ? buildStrengthWorkout(state, band, mainBudget)
       : buildCircuitWorkout(state, band, mainBudget);
 
+    // The finisher is kept separate from workout.blocks (not merged in) because a
+    // circuit's blocks are all repeated together for N rounds — folding a single,
+    // once-only cardio block into that array would make it run every round instead
+    // of once at the very end, for both strength and circuit sessions.
+    const finisher = buildCardioFinisher(state, state.progress.difficultyTier);
+
     const cooldown = pickTargetedCooldown(workout.blocks);
 
-    const estMinutes = estimateMinutes(workout, warmup, cooldown);
+    const estMinutes = estimateMinutes(workout, warmup, cooldown, finisher);
 
     return {
       id: 'w_' + Date.now(),
@@ -383,6 +436,7 @@ const Generator = (() => {
       transitionSec: TRANSITION_SEC,
       warmup, cooldown,
       blocks: workout.blocks,
+      finisher,
       estMinutes,
       difficultyTier: Math.round(state.progress.difficultyTier * 10) / 10,
     };
