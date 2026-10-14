@@ -1,0 +1,21 @@
+{
+  "name": "tawazun-fitness",
+  "version": "1.0.0",
+  "description": "Tawazun — a personal gym workout app focused on back and core strength",
+  "private": true,
+  "scripts": {
+    "sync": "cap sync android"
+  },
+  "dependencies": {
+    "@capacitor-community/file-opener": "^6.0.1",
+    "@capacitor/android": "6.2.0",
+    "@capacitor/core": "6.2.0",
+    "@capacitor/filesystem": "^6.0.4",
+    "@capacitor/local-notifications": "6.1.1",
+    "@capacitor/preferences": "6.0.3"
+  },
+  "devDependencies": {
+    "@capacitor/assets": "3.0.5",
+    "@capacitor/cli": "6.2.0"
+  }
+}

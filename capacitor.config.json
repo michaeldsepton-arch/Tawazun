@@ -1,0 +1,9 @@
+{
+  "appId": "com.sepphouse.tawazun",
+  "appName": "Tawazun",
+  "webDir": "www",
+  "backgroundColor": "#0F1A13",
+  "android": {
+    "backgroundColor": "#0F1A13"
+  }
+}
