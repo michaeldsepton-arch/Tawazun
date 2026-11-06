@@ -3,7 +3,14 @@
 const Generator = (() => {
 
   const TRANSITION_SEC = 15; // time to change position / grab equipment between different exercises
-  const WEIGHTED_EQUIPMENT = ['dumbbell', 'barbell', 'plate', 'cable'];
+  // Any equipment whose load he actually dials in and should log a weight for —
+  // includes weight-stack machines (lat pulldown, rows, leg press/curl/extension,
+  // hack squat), not just free weights. Equipment left out here (bodyweight,
+  // pull-up bar, bench alone, assisted pull-up's counterweight) gets no weight field.
+  const WEIGHTED_EQUIPMENT = [
+    'dumbbell', 'barbell', 'plate', 'cable',
+    'lat_pulldown', 'seated_row', 'leg_press', 'leg_curl', 'leg_extension', 'hack_squat',
+  ];
 
   // Back and abs train every gym day (the user's own stated priority, given his back).
   // The other four muscle groups rotate two-at-a-time by day of week, so each one lands
@@ -104,6 +111,17 @@ const Generator = (() => {
     if (pool.length === 0) pool = EXERCISES.filter(e => groups.includes(e.group) && isTopLadderRung(e)); // last resort, ignore equipment/exclude
     if (pool.length === 0) return null;
 
+    // Anything left over from a workout she didn't get all the way through (see
+    // storage.js's carryOverExerciseIds / Progress.updateCarryOver) gets dibs on
+    // this slot if it's actually eligible for this group right now — so a move
+    // she ran out of time for still shows back up soon instead of just sliding
+    // out of rotation on the normal recency math.
+    const carryOver = state.carryOverExerciseIds || [];
+    if (carryOver.length) {
+      const carried = pool.filter(e => carryOver.includes(e.id));
+      if (carried.length) pool = carried;
+    }
+
     const targetTier = state.progress.difficultyTier;
     const prefs = state.exercisePrefs || {};
     let best = null, bestScore = -Infinity;
@@ -126,10 +144,47 @@ const Generator = (() => {
 
   // Rest between sets, and the set-count range we're allowed to flex within to hit the
   // time budget. Higher tiers rest a little less and can take on more total sets.
+  // Fixed at 3 sets per exercise per his own call ("3 sets is plenty, no need for
+  // 4") — rest and tempo still scale with difficulty, but set count no longer
+  // grows to fill the time budget. A workout that runs short of its target
+  // length now just runs short rather than padding sets on; see the carried-
+  // over-exercises fix for the other half of that trade (more exercises
+  // covered over time rather than more sets piled onto fewer).
   function tierBand(tier) {
-    if (tier < 1.5) return { restSec: 45, minSets: 2, maxSets: 5, repTempo: 3.4 };
-    if (tier < 2.5) return { restSec: 35, minSets: 3, maxSets: 6, repTempo: 3.0 };
-    return { restSec: 25, minSets: 3, maxSets: 7, repTempo: 2.7 };
+    if (tier < 1.5) return { restSec: 45, minSets: 3, maxSets: 3, repTempo: 3.4 };
+    if (tier < 2.5) return { restSec: 35, minSets: 3, maxSets: 3, repTempo: 3.0 };
+    return { restSec: 25, minSets: 3, maxSets: 3, repTempo: 2.7 };
+  }
+
+  // Picks warmups that actually prime the muscle groups being trained today — back
+  // day gets a back/abs warmup, not squats; leg day gets squats/leg swings instead
+  // of an upper-body band pull-apart. `groups` is known up front (back+abs plus
+  // today's two secondary groups), unlike cooldown which has to wait for the real
+  // blocks to exist — so this can run before the workout is built.
+  function pickTargetedWarmup(pool, groups, n) {
+    const used = new Set();
+    const picks = [];
+
+    const matched = pool.filter(w => w.targets && w.targets.some(t => groups.includes(t)));
+    while (picks.length < n && matched.length) {
+      const i = Math.floor(Math.random() * matched.length);
+      const chosen = matched.splice(i, 1)[0];
+      if (used.has(chosen.id)) continue;
+      used.add(chosen.id);
+      picks.push(chosen);
+    }
+
+    if (picks.length < n) {
+      const generic = pool.filter(w => !used.has(w.id) && (!w.targets || w.targets.length === 0));
+      pickFew(generic, n - picks.length).forEach(w => { used.add(w.id); picks.push(w); });
+    }
+
+    if (picks.length < n) {
+      const rest = pool.filter(w => !used.has(w.id));
+      pickFew(rest, n - picks.length).forEach(w => picks.push(w));
+    }
+
+    return picks.slice(0, n);
   }
 
   function pickFew(list, n) {
@@ -223,7 +278,8 @@ const Generator = (() => {
       const sug = Progress.suggestNext(state, ex.id);
       suggestedWeightKg = sug.suggestedKg;
       overloadNote = sug.note;
-      repTarget = `${Progress.REP_TARGET_LO}-${Progress.REP_TARGET_HI}`;
+      const range = Progress.repRangeFor(ex.id);
+      repTarget = `${range.lo}-${range.hi}`;
     } else if (ex.ladder) {
       // Bodyweight build-up ladder step (push-up, plank, pull-up, etc.) — no weight
       // involved, but still worth a "last time / aim for" note so progress toward
@@ -347,12 +403,11 @@ const Generator = (() => {
     const roundSec = perExerciseSec.reduce((a, s) => a + s, 0)
       + (exList.length - 1) * TRANSITION_SEC // changeovers within the round
       + restSec; // rest before next round
-    // Circuits naturally support more total rounds than a straight-set exercise can
-    // take sets, since each round spreads the work across every move rather than
-    // hammering one move repeatedly — cap generously so a 60-75 minute budget can
-    // actually be reached instead of being squeezed to fit a strength-sized ceiling.
+    // Capped the same as strength sets, 3 max, per his call that 3 is plenty —
+    // a circuit "round" is the same thing as a "set" here, just spread across
+    // every move instead of repeating one move in a row.
     let rounds = Math.max(2, Math.round(mainBudget / roundSec));
-    rounds = Math.min(rounds, 10);
+    rounds = Math.min(rounds, 3);
 
     const blocks = exList.map(ex => makeBlock(ex, rounds, restSec, state.progress.difficultyTier, band.repTempo, state));
     return { type: 'circuit', blocks };
@@ -410,8 +465,10 @@ const Generator = (() => {
     const band = tierBand(state.progress.difficultyTier);
     const targetTotalSec = (state.settings.sessionMinutes || 65) * 60;
 
+    const [groupA, groupB] = secondaryGroupsForToday(state);
+    const todayGroups = ['back', 'abs', groupA, groupB];
     const warmupPool = WARMUPS.filter(w => !w.equipment || w.equipment.some(eq => state.settings.equipment.includes(eq)));
-    const warmup = pickFew(warmupPool, 2);
+    const warmup = pickTargetedWarmup(warmupPool, todayGroups, 2);
     // Cool-down stretches depend on which patterns actually end up in the workout
     // (so they can be tailored to what he trained), which isn't known until the
     // workout itself is built below — use a rough average cooldown length here
