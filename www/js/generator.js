@@ -202,6 +202,22 @@ const Generator = (() => {
   // (in the order they appear in the workout) and takes one matching stretch per
   // pattern, then tops up with any other matching stretch, then finally generic
   // ones (deep breathing, etc.) so she still always gets at least two.
+  // Ascending by total times done (never-done = 0), tie-broken by how long
+  // it's been since each was last done (oldest/never first) so a tie doesn't
+  // reorder itself randomly on every regeneration.
+  function sortByLeastCompleted(state, blocks) {
+    const timesDone = (exId) => (state.exercisePerf[exId] && state.exercisePerf[exId].timesPerformed) || 0;
+    const lastDoneMs = (exId) => {
+      const d = state.exerciseRecency[exId];
+      return d ? new Date(d).getTime() : 0;
+    };
+    return [...blocks].sort((a, b) => {
+      const diff = timesDone(a.exerciseId) - timesDone(b.exerciseId);
+      if (diff !== 0) return diff;
+      return lastDoneMs(a.exerciseId) - lastDoneMs(b.exerciseId);
+    });
+  }
+
   function pickTargetedCooldown(blocks) {
     const trained = [...new Set((blocks || []).map(b => b.pattern))];
     const used = new Set();
@@ -503,6 +519,18 @@ const Generator = (() => {
     const finisher = buildCardioFinisher(state, state.progress.difficultyTier);
 
     const cooldown = pickTargetedCooldown(workout.blocks);
+
+    // Order today's exercises by how little they've been done overall (fewest
+    // total completions first), NOT by picking different exercises — the set
+    // for today was already decided above. This is purely so that if a
+    // session gets cut short, it's always the exercise that's fallen furthest
+    // behind that gets reached first, not whatever happened to be listed
+    // first. Over repeated sessions that self-corrects: once an exercise
+    // catches up, it naturally drops back and whatever's next-least-done
+    // takes the front. Ties (e.g. everything still at 0) break by how long
+    // it's been since each was last done, oldest-or-never first, so the
+    // order doesn't jump around arbitrarily between regenerations.
+    workout.blocks = sortByLeastCompleted(state, workout.blocks);
 
     const estMinutes = estimateMinutes(workout, warmup, cooldown, finisher);
 
