@@ -28,8 +28,8 @@ const Store = (() => {
       pauseMode: false,              // "pause program" switch for rest/injury weeks — stops nudges
       soundOnFinish: true,           // play a sound when a timer/set finishes
       vibrateOnFinish: true,
-      units: 'kg',                   // 'kg' or 'lbs' — Progress tab display only, everything is stored in kg
-      entryUnits: 'kg',              // 'kg' or 'lbs' — remembers the last unit picked at any weight *input* field
+      units: 'lbs',                  // 'kg' or 'lbs' — Progress tab display only, everything is stored in kg
+      entryUnits: 'lbs',             // 'kg' or 'lbs' — remembers the last unit picked at any weight *input* field
     },
     progress: {
       difficultyTier: 1.8,          // 1.0 - 3.0, floats, scales up with consistency — starts above
@@ -87,6 +87,15 @@ const Store = (() => {
       if (!merged.settings._weighInDayMigrated) {
         if (merged.settings.weighInDay === 6) merged.settings.weighInDay = 3;
         merged.settings._weighInDayMigrated = true;
+      }
+      // One-time migration: the unit default changed from kg to lbs. If he's
+      // still sitting on the old default (never picked a unit himself), move
+      // him onto the new default once, then stop touching it — a deliberate
+      // switch to kg afterward sticks.
+      if (!merged.settings._unitsMigratedToLbs) {
+        if (merged.settings.units === 'kg') merged.settings.units = 'lbs';
+        if (merged.settings.entryUnits === 'kg') merged.settings.entryUnits = 'lbs';
+        merged.settings._unitsMigratedToLbs = true;
       }
       return merged;
     } catch (e) {
