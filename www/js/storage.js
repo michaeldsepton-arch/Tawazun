@@ -97,6 +97,16 @@ const Store = (() => {
         if (merged.settings.entryUnits === 'kg') merged.settings.entryUnits = 'lbs';
         merged.settings._unitsMigratedToLbs = true;
       }
+      // One-time: Kneeling Cable Crunch was too easy to do with bad form (hips
+      // doing the work instead of the spine) — replaced in the rotation by
+      // Weighted Floor Crunch. Exclude it once; he can still re-enable it
+      // himself from Settings if he ever wants it back.
+      if (!merged.settings._cableCrunchExcluded) {
+        if (!merged.settings.excludedExerciseIds.includes('cable_crunch')) {
+          merged.settings.excludedExerciseIds.push('cable_crunch');
+        }
+        merged.settings._cableCrunchExcluded = true;
+      }
       return merged;
     } catch (e) {
       console.warn('Store load failed, using defaults', e);

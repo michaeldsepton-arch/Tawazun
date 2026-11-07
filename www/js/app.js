@@ -297,7 +297,16 @@ const App = (() => {
       $('mainApp').style.display = 'block';
       $('tabbar').style.display = 'block';
       ensurePendingWorkout();
-      renderHome();
+      // Pick back up mid-workout if the app process restarted (an update, a
+      // crash, Android reaping it in the background) while a session was
+      // still active — see persistSession()/restoreActiveSession() below.
+      if (restoreActiveSession()) {
+        const workoutTab = $('workoutTabBtn');
+        if (workoutTab) workoutTab.style.display = '';
+        goToWorkoutTab();
+      } else {
+        renderHome();
+      }
       Notify.refreshSchedule(Store.get());
     }
 
@@ -511,6 +520,7 @@ const App = (() => {
       const completed = session.completedExerciseIds;
       Store.set(s => Progress.updateCarryOver(s, planned, completed));
       session = null;
+      clearPersistedSession();
       const workoutTab = $('workoutTabBtn');
       if (workoutTab) workoutTab.style.display = 'none';
     }
@@ -1111,6 +1121,54 @@ const App = (() => {
         $('playerSub').textContent = 'paused — tap resume';
       }
     }
+    persistSession();
+  }
+
+  // The in-progress workout (which step he's on, what he's already logged for
+  // each set) lived only in the `session` variable in memory — fine for
+  // switching tabs, but an app UPDATE restarts the whole process and wipes it,
+  // which is exactly what "it lost my progress" was: the update itself was
+  // never the problem, nothing about his saved history or settings was ever
+  // touched — it was always this one thing that was never saved anywhere.
+  // Snapshotting it to localStorage on every step and restoring it on launch
+  // closes that gap so a reinstall (or Android just killing the app in the
+  // background) picks back up exactly where he left off.
+  const ACTIVE_SESSION_KEY = 'wfa.activeSession.v1';
+  function persistSession() {
+    try {
+      if (!session || session.isTutorialDemo) { localStorage.removeItem(ACTIVE_SESSION_KEY); return; }
+      localStorage.setItem(ACTIVE_SESSION_KEY, JSON.stringify({
+        workout: session.workout,
+        idx: session.idx,
+        feedback: session.feedback,
+        startedAt: session.startedAt,
+        completedExerciseIds: Array.from(session.completedExerciseIds),
+        stepEntries: session.stepEntries,
+      }));
+    } catch (e) { /* storage full or unavailable — losing the snapshot isn't fatal */ }
+  }
+
+  function clearPersistedSession() {
+    try { localStorage.removeItem(ACTIVE_SESSION_KEY); } catch (e) {}
+  }
+
+  function restoreActiveSession() {
+    try {
+      const raw = localStorage.getItem(ACTIVE_SESSION_KEY);
+      if (!raw) return false;
+      const snap = JSON.parse(raw);
+      if (!snap || !snap.workout || !Array.isArray(snap.workout.blocks)) return false;
+      session = {
+        workout: snap.workout,
+        steps: buildSteps(snap.workout),
+        idx: snap.idx || 0,
+        feedback: snap.feedback || null,
+        startedAt: snap.startedAt || Date.now(),
+        completedExerciseIds: new Set(snap.completedExerciseIds || []),
+        stepEntries: snap.stepEntries || {},
+      };
+      return session.idx < session.steps.length;
+    } catch (e) { return false; }
   }
 
   function subLabel(step) {
@@ -1412,6 +1470,7 @@ const App = (() => {
       Store.set(s => Progress.updateCarryOver(s, planned, completed));
     }
     session = null;
+    clearPersistedSession();
     const workoutTab = $('workoutTabBtn');
     if (workoutTab) workoutTab.style.display = 'none';
     goto('home');
@@ -1452,6 +1511,7 @@ const App = (() => {
       return s;
     });
     session = null;
+    clearPersistedSession();
     const workoutTab = $('workoutTabBtn');
     if (workoutTab) workoutTab.style.display = 'none';
     Notify.refreshSchedule(Store.get());
